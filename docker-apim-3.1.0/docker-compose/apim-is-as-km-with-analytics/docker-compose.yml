@@ -1,0 +1,102 @@
+# Copyright (c) 2019, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+version: '2.3'
+services:
+  mysql:
+    image: mysql:5.7.29
+    ports:
+      - 3306
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - ./mysql/scripts:/docker-entrypoint-initdb.d
+      - ./mysql/conf/my.cnf:/etc/mysql/my.cnf
+    ulimits:
+      nofile:
+        soft: 20000
+        hard: 40000
+    command: [--ssl=0]
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-uroot", "-proot"]
+      interval: 30s
+      timeout: 60s
+      retries: 5
+      start_period: 80s
+  am-analytics-worker:
+    image: docker.wso2.com/wso2am-analytics-worker:3.1.0
+    ports:
+      - "9090"
+      - "9443"
+    healthcheck:
+      test: ["CMD", "nc", "-z","localhost", "9443"]
+      interval: 10s
+      start_period: 20s
+      retries: 5
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./apim-analytics-worker:/home/wso2carbon/wso2-config-volume
+  is-as-km:
+    image: docker.wso2.com/wso2is-km:5.10.0
+    healthcheck:
+      test: ["CMD", "nc", "-z","localhost", "9443"]
+      interval: 10s
+      start_period: 100s
+      retries: 10
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./is-as-km:/home/wso2carbon/wso2-config-volume
+    ports:
+      - "9765:9763"
+      - "9444:9443"
+  api-manager:
+    image: docker.wso2.com/wso2am:3.1.0
+    healthcheck:
+      test: ["CMD", "nc", "-z","localhost", "9443"]
+      interval: 10s
+      start_period: 100s
+      retries: 10
+    depends_on:
+      mysql:
+        condition: service_healthy
+      # am-analytics-worker:
+      #   condition: service_healthy
+      # is-as-km:
+      #   condition: service_healthy
+    volumes:
+      - ./apim:/home/wso2carbon/wso2-config-volume
+    ports:
+      - "9443:9443"
+      - "8280:8280"
+      - "8243:8243"
+  am-analytics-dashboard:
+    image: docker.wso2.com/wso2am-analytics-dashboard:3.1.0
+    ports:
+      - "9640:9640"
+    healthcheck:
+      test: ["CMD", "nc", "-z","localhost", "9640"]
+      interval: 10s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      mysql:
+        condition: service_healthy
+      # api-manager:
+      #   condition: service_healthy
+    volumes:
+      - ./apim-analytics-dashboard:/home/wso2carbon/wso2-config-volume
